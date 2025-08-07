@@ -1,0 +1,143 @@
+# UserCanal C++ SDK .gitignore
+# Generated files and build artifacts that should not be committed
+
+# Build directories and artifacts
+build/
+bin/
+lib/
+dist/
+out/
+
+# Compiled object files
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.lib
+*.exp
+*.pdb
+
+# Executables
+*.exe
+examples/basic_foundation
+examples/event_simple
+examples/log_simple
+examples/log_severities
+examples/event_revenue
+tests/usercanal_tests
+
+# Debug information
+*.dSYM/
+**/*.dSYM/
+*.dSYM.zip
+*.su
+*.idb
+*.pdb
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+*.cmake
+!CMakeLists.txt
+!cmake/*.cmake.in
+cmake_install.cmake
+compile_commands.json
+CPackConfig.cmake
+CPackSourceConfig.cmake
+CTestTestfile.cmake
+install_manifest.txt
+
+# Generated FlatBuffers headers
+generated/
+*_generated.h
+build/generated/
+
+# Package files
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+*.pkg
+
+# IDE and editor files
+.vscode/
+.vs/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.cache
+
+# Test results and coverage
+*.gcov
+*.gcda
+*.gcno
+coverage/
+test_results/
+gtest_*.xml
+
+# Static analysis
+cppcheck-*.xml
+clang-static-analyzer/
+
+# Documentation generated files
+docs/html/
+docs/latex/
+docs/xml/
+*.pdf
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Local configuration files (keep examples)
+local_config.hpp
+local_settings.json
+
+# Environment-specific files
+.env
+.env.local
+.env.production
+.env.test
+
+# Profiling data
+*.prof
+perf.data*
+gprof.out
+callgrind.out*
+
+# Memory debugging
+valgrind-*.log
+*.memcheck
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Keep these important files
+!README.md
+!STATUS.md
+!LICENSE
+!CHANGELOG.md
+!.clangd
+!.clang-format
+
+# Build artifacts that should be ignored
+libUserCanal.a
+.cache/

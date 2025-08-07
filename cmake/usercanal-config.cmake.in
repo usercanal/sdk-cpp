@@ -1,0 +1,55 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Find required dependencies
+find_dependency(Threads REQUIRED)
+find_dependency(Flatbuffers REQUIRED)
+
+# Find optional dependencies
+find_dependency(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(NLOHMANN_JSON QUIET nlohmann_json)
+endif()
+
+if(NOT NLOHMANN_JSON_FOUND)
+    find_dependency(nlohmann_json QUIET)
+endif()
+
+# Include targets file
+include("${CMAKE_CURRENT_LIST_DIR}/usercanal-targets.cmake")
+
+# Set variables for compatibility
+set(USERCANAL_FOUND TRUE)
+set(USERCANAL_VERSION "@PROJECT_VERSION@")
+set(USERCANAL_VERSION_MAJOR "@PROJECT_VERSION_MAJOR@")
+set(USERCANAL_VERSION_MINOR "@PROJECT_VERSION_MINOR@")
+set(USERCANAL_VERSION_PATCH "@PROJECT_VERSION_PATCH@")
+
+# Check that all required components are available
+check_required_components(usercanal)
+
+# Provide usage information
+if(NOT TARGET usercanal::usercanal)
+    message(FATAL_ERROR "UserCanal C++ SDK not found. Expected target 'usercanal::usercanal' to be available.")
+endif()
+
+# Set legacy variables for backward compatibility
+set(USERCANAL_LIBRARIES usercanal::usercanal)
+set(USERCANAL_INCLUDE_DIRS "$<TARGET_PROPERTY:usercanal::usercanal,INTERFACE_INCLUDE_DIRECTORIES>")
+set(USERCANAL_DEFINITIONS "$<TARGET_PROPERTY:usercanal::usercanal,INTERFACE_COMPILE_DEFINITIONS>")
+
+# Provide information about the package
+set(USERCANAL_DESCRIPTION "UserCanal C++ SDK for high-performance analytics and logging")
+set(USERCANAL_URL "https://github.com/usercanal/sdk-cpp")
+
+# Configuration summary
+message(STATUS "Found UserCanal C++ SDK: ${USERCANAL_VERSION}")
+message(STATUS "  Version: ${USERCANAL_VERSION}")
+message(STATUS "  Target: usercanal::usercanal")
+
+if(nlohmann_json_FOUND OR NLOHMANN_JSON_FOUND)
+    message(STATUS "  JSON support: Enabled (nlohmann/json)")
+else()
+    message(STATUS "  JSON support: Disabled (nlohmann/json not found)")
+endif()
