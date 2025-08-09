@@ -16,7 +16,7 @@ int main() {
     try {
         // Initialize UserCanal client
         Config config(api_key);
-        config.set_endpoint("localhost:50001");  // Configure endpoint
+        config.set_endpoint("localhost:50000");  // Configure endpoint
         Client client(config);
         client.initialize();
 
