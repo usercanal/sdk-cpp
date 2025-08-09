@@ -41,11 +41,6 @@ EventBatchItem::EventBatchItem(EventType event_type, const std::string& user_id,
 }
 
 std::vector<uint8_t> EventBatchItem::serialize() const {
-    std::cout << "🔧 [DEBUG] Serializing EventBatchItem:" << std::endl;
-    std::cout << "  - user_id: " << user_id_ << std::endl;
-    std::cout << "  - event_type: " << static_cast<int>(event_type_) << std::endl;
-    std::cout << "  - payload size: " << payload_.size() << std::endl;
-    
     // Create FlatBuffers builder
     flatbuffers::FlatBufferBuilder builder(1024);
     
@@ -76,7 +71,6 @@ std::vector<uint8_t> EventBatchItem::serialize() const {
     
     std::vector<uint8_t> data(buf, buf + size);
     
-    std::cout << "🔧 [DEBUG] Event serialized to " << data.size() << " bytes using high-level FlatBuffers API" << std::endl;
     return data;
 }
 
@@ -109,11 +103,6 @@ LogBatchItem::LogBatchItem(LogLevel level, const std::string& service, std::vect
 }
 
 std::vector<uint8_t> LogBatchItem::serialize() const {
-    std::cout << "🔧 [DEBUG] LogBatchItem::serialize() called - this method is now handled by Batch::serialize()" << std::endl;
-    std::cout << "  - service: " << service_ << std::endl;
-    std::cout << "  - level: " << static_cast<int>(level_) << std::endl;
-    std::cout << "  - context_id: " << context_id_ << std::endl;
-    std::cout << "  - payload size: " << payload_.size() << std::endl;
     
     // This method is no longer used for LOG batches since we create
     // a single LogData structure in Batch::serialize() instead of
@@ -185,9 +174,6 @@ template<typename ItemType>
 std::vector<uint8_t> Batch<ItemType>::serialize(const ApiKey& api_key, SchemaType schema_type) const {
     std::lock_guard<std::mutex> lock(mutex_);
     
-    std::cout << "🔧 [DEBUG] Serializing Batch with " << items_.size() << " items" << std::endl;
-    std::cout << "🔧 [DEBUG] Schema type: " << (schema_type == SchemaType::EVENT ? "EVENT" : "LOG") << std::endl;
-    
     std::vector<uint8_t> inner_data;
     
     if (schema_type == SchemaType::LOG) {
@@ -221,16 +207,7 @@ std::vector<uint8_t> Batch<ItemType>::serialize(const ApiKey& api_key, SchemaTyp
                     case LogLevel::TRACE:     fb_level = schema::log::LogLevel_TRACE; break;
                     default:                  fb_level = schema::log::LogLevel_INFO; break;
                 }
-                
-                // Debug output
-                std::cout << "🔧 [DEBUG] Creating LogEntry with Object-based API pattern" << std::endl;
-                std::cout << "  - event_type: " << static_cast<int>(schema::log::LogEventType_LOG) << " (LOG)" << std::endl;
-                std::cout << "  - context_id: " << context_id << std::endl;
-                std::cout << "  - level: " << static_cast<int>(fb_level) << std::endl;
-                std::cout << "  - timestamp: " << timestamp << std::endl;
-                std::cout << "  - source: '" << hostname << "'" << std::endl;
-                std::cout << "  - service: '" << log_item->get_service() << "'" << std::endl;
-                std::cout << "  - payload size: " << log_item->get_payload().size() << " bytes" << std::endl;
+
                 
                 // Use fixed generated CreateLogEntry function (field order now corrected)
                 // Create string and vector offsets first
@@ -263,69 +240,7 @@ std::vector<uint8_t> Batch<ItemType>::serialize(const ApiKey& api_key, SchemaTyp
         size_t size = inner_builder.GetSize();
         inner_data = std::vector<uint8_t>(buffer, buffer + size);
         
-        std::cout << "🔧 [DEBUG] LogData with " << log_entries.size() << " entries serialized to " << inner_data.size() << " bytes" << std::endl;
-        
-        // Show first 32 bytes for comparison with Go SDK  
-        std::cout << "🔍 [DEBUG] LogData hex (first 32 bytes): ";
-        for (size_t i = 0; i < std::min(inner_data.size(), size_t(32)); ++i) {
-            printf("%02x ", inner_data[i]);
-        }
-        std::cout << std::endl;
-        
-        // Key analysis: Look for event_type=1 pattern
-        std::cout << "🔍 [DEBUG] Event type analysis:" << std::endl;
-        for (size_t i = 0; i < inner_data.size() - 3; ++i) {
-            if (inner_data[i] == 1 && inner_data[i+1] == 0 && inner_data[i+2] == 0 && inner_data[i+3] == 0) {
-                std::cout << "  - Found event_type=1 (little-endian) at offset 0x" << std::hex << i << std::dec << std::endl;
-            }
-        }
-        
-        // Detailed vtable analysis to find exact field offset issue
-        std::cout << "🔬 [VTABLE ANALYSIS] LogData structure breakdown:" << std::endl;
-        if (inner_data.size() >= 16) {
-            // FlatBuffer root table pointer (last 4 bytes)
-            uint32_t root_offset = inner_data.size() - 4;
-            uint32_t table_pos = *reinterpret_cast<const uint32_t*>(&inner_data[root_offset]);
-            std::cout << "  - Root table at offset: " << table_pos << std::endl;
-            
-            if (table_pos < inner_data.size() && table_pos >= 4) {
-                // Read vtable offset from table
-                uint32_t vtable_offset_from_table = *reinterpret_cast<const uint32_t*>(&inner_data[table_pos]);
-                uint32_t vtable_pos = table_pos - vtable_offset_from_table;
-                std::cout << "  - VTable at offset: " << vtable_pos << std::endl;
-                
-                if (vtable_pos < inner_data.size() - 8) {
-                    uint16_t vtable_size = *reinterpret_cast<const uint16_t*>(&inner_data[vtable_pos]);
-                    uint16_t object_size = *reinterpret_cast<const uint16_t*>(&inner_data[vtable_pos + 2]);
-                    std::cout << "  - VTable size: " << vtable_size << ", Object size: " << object_size << std::endl;
-                    
-                    // Read vtable field offsets
-                    for (int i = 4; i < vtable_size && i < 20; i += 2) {
-                        uint16_t field_offset = *reinterpret_cast<const uint16_t*>(&inner_data[vtable_pos + i]);
-                        std::cout << "  - VTable[" << i << "]: field_offset=" << field_offset;
-                        if (field_offset != 0) {
-                            uint32_t field_pos = table_pos + field_offset;
-                            if (field_pos < inner_data.size()) {
-                                uint8_t field_value = inner_data[field_pos];
-                                std::cout << " -> byte value: " << static_cast<int>(field_value);
-                                if (i == 4) std::cout << " (EVENT_TYPE)";
-                                else if (i == 8) std::cout << " (LEVEL)";
-                            }
-                        }
-                        std::cout << std::endl;
-                    }
-                }
-            }
-        }
-        
-        // Check bytes around offset 0x30 where collector expects to find event_type
-        if (inner_data.size() >= 52) {
-            std::cout << "  - Bytes at 0x30-0x33 (where collector reads): ";
-            for (int i = 0x30; i < 0x34; ++i) {
-                printf("%02x ", inner_data[i]);
-            }
-            std::cout << " -> as uint32: " << *reinterpret_cast<const uint32_t*>(&inner_data[0x30]) << std::endl;
-        }
+
         
     } else {
         // For EVENT batches: Concatenate individual serialized items (existing behavior)
@@ -333,7 +248,7 @@ std::vector<uint8_t> Batch<ItemType>::serialize(const ApiKey& api_key, SchemaTyp
             auto item_data = item->serialize();
             inner_data.insert(inner_data.end(), item_data.begin(), item_data.end());
         }
-        std::cout << "🔧 [DEBUG] Event data serialized to " << inner_data.size() << " bytes" << std::endl;
+
     }
     
     // Create the top-level Batch wrapper using BatchBuilder pattern with Go SDK capacity
@@ -376,18 +291,7 @@ std::vector<uint8_t> Batch<ItemType>::serialize(const ApiKey& api_key, SchemaTyp
     const uint8_t* buffer = batch_builder.GetBufferPointer();
     size_t size = batch_builder.GetSize();
     
-    std::cout << "🔧 [DEBUG] Final Batch serialized to " << size << " bytes" << std::endl;
-    std::cout << "🔍 [DEBUG] Batch header (first 64 bytes): ";
-    for (size_t i = 0; i < std::min(size, size_t(64)); ++i) {
-        printf("%02x ", buffer[i]);
-    }
-    std::cout << std::endl;
-    
-    // Quick verification of key offsets for event_type parsing
-    if (size > 0x38) {
-        std::cout << "🔍 [DEBUG] Inner LogData starts around offset 0x38-0x40" << std::endl;
-        std::cout << "🔍 [DEBUG] Expected event_type=1 at LogEntry start" << std::endl;
-    }
+
     
     return std::vector<uint8_t>(buffer, buffer + size);
 }

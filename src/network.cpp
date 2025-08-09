@@ -611,27 +611,21 @@ public:
     bool connect() {
         if (is_connected_) return true;
         
-        std::cout << "🔧 [DEBUG] Attempting to connect..." << std::endl;
-        
         // Parse endpoint
         std::string endpoint = config_.network().endpoint;
         size_t colon_pos = endpoint.find(':');
         if (colon_pos == std::string::npos) {
-            std::cout << "❌ [DEBUG] Invalid endpoint format: " << endpoint << std::endl;
             return false;
         }
         
         std::string host = endpoint.substr(0, colon_pos);
         uint16_t port = static_cast<uint16_t>(std::stoi(endpoint.substr(colon_pos + 1)));
-        std::cout << "🔧 [DEBUG] Connecting to " << host << ":" << port << std::endl;
         
         // Create socket
         socket_fd_ = socket(AF_INET, SOCK_STREAM, 0);
         if (socket_fd_ < 0) {
-            std::cout << "❌ [DEBUG] Socket creation failed: " << strerror(errno) << std::endl;
             return false;
         }
-        std::cout << "🔧 [DEBUG] Socket created successfully (fd=" << socket_fd_ << ")" << std::endl;
         
         // Set up address
         struct sockaddr_in server_addr{};
@@ -639,32 +633,22 @@ public:
         server_addr.sin_port = htons(port);
         
         if (inet_pton(AF_INET, host.c_str(), &server_addr.sin_addr) <= 0) {
-            std::cout << "🔧 [DEBUG] IP address parsing failed, trying hostname resolution..." << std::endl;
             // Try hostname resolution
             struct hostent* host_entry = gethostbyname(host.c_str());
             if (!host_entry) {
-                std::cout << "❌ [DEBUG] Hostname resolution failed for: " << host << std::endl;
                 close(socket_fd_);
                 socket_fd_ = -1;
                 return false;
             }
-            std::cout << "🔧 [DEBUG] Hostname resolved successfully" << std::endl;
             memcpy(&server_addr.sin_addr, host_entry->h_addr, host_entry->h_length);
-        } else {
-            std::cout << "🔧 [DEBUG] IP address parsed successfully" << std::endl;
         }
         
         // Connect
-        std::cout << "🔧 [DEBUG] Attempting TCP connection..." << std::endl;
         if (::connect(socket_fd_, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-            std::cout << "❌ [DEBUG] TCP connection failed: " << strerror(errno) << std::endl;
-            std::cout << "❌ [DEBUG] Is server running on " << host << ":" << port << "?" << std::endl;
             close(socket_fd_);
             socket_fd_ = -1;
             return false;
         }
-        
-        std::cout << "✅ [DEBUG] TCP connection established!" << std::endl;
         is_connected_ = true;
         return true;
     }
@@ -678,35 +662,11 @@ public:
     }
     
     void send_data(const std::vector<uint8_t>& data) {
-        // DEBUG: Print what we're trying to send
-        std::cout << "🔧 [DEBUG] Sending " << data.size() << " bytes to " 
-                  << config_.network().endpoint << std::endl;
-        
-        // DEBUG: Dump first 64 bytes of data in hex
-        std::cout << "🔧 [DEBUG] Data (hex): ";
-        for (size_t i = 0; i < std::min(data.size(), size_t(64)); ++i) {
-            printf("%02x ", data[i]);
-        }
-        if (data.size() > 64) std::cout << "...";
-        std::cout << std::endl;
-        
-        // DEBUG: Try to show as ASCII for readability
-        std::cout << "🔧 [DEBUG] Data (ascii): ";
-        for (size_t i = 0; i < std::min(data.size(), size_t(64)); ++i) {
-            char c = static_cast<char>(data[i]);
-            std::cout << (isprint(c) ? c : '.');
-        }
-        if (data.size() > 64) std::cout << "...";
-        std::cout << std::endl;
-
         if (!is_connected_) {
-            std::cout << "🔧 [DEBUG] Not connected, attempting to connect..." << std::endl;
             if (!connect()) {
-                std::cout << "❌ [DEBUG] Connection failed!" << std::endl;
                 stats_.connections_failed++;
                 return;
             }
-            std::cout << "✅ [DEBUG] Connected successfully!" << std::endl;
         }
 
         // Create frame with 4-byte big-endian length prefix + data
@@ -722,8 +682,6 @@ public:
         
         // Add actual data
         frame.insert(frame.end(), data.begin(), data.end());
-        
-        std::cout << "🔧 [DEBUG] Frame: " << frame.size() << " bytes (4-byte prefix + " << data.size() << " payload)" << std::endl;
 
         // Send complete frame over TCP socket
         size_t total_sent = 0;
@@ -751,7 +709,6 @@ public:
             total_sent += bytes_sent;
         }
         
-        std::cout << "✅ [DEBUG] Successfully sent " << total_sent << " bytes!" << std::endl;
         stats_.bytes_sent += frame.size();
         stats_.send_operations++;
     }
