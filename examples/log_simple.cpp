@@ -3,6 +3,8 @@
 // Shows basic structured logging with UserCanal C++ SDK
 
 #include <iostream>
+#include <chrono>
+#include <thread>
 #include "usercanal/usercanal.hpp"
 
 using namespace usercanal;
@@ -10,57 +12,45 @@ using namespace usercanal;
 int main() {
     std::cout << "📝 UserCanal C++ SDK - Simple Logging\n" << std::endl;
     
-    // Replace with your API key
-    std::string api_key = "your-api-key-here";
-    
-    if (api_key == "your-api-key-here") {
-        std::cout << "⚠️  Please set your UserCanal API key in the source code" << std::endl;
-        std::cout << "   Get your API key from: https://app.usercanal.com/settings/api-keys" << std::endl;
-        return 1;
-    }
+    std::string api_key = "000102030405060708090a0b0c0d0e0f";
     
     try {
         // Initialize client
-        Client client(api_key);
+        Config config(api_key);
+        config.set_endpoint("localhost:50001");  // Configure endpoint
+        Client client(config);
         client.initialize();
+
+        std::cout << "✅ UserCanal SDK initialized" << std::endl;
         
-        std::cout << "✅ UserCanal SDK initialized\n" << std::endl;
+        // Send various log messages:
+        // client.LogInfo(ctx, "my-app", "Application started", nil)
+        client.log_info("my-app", "Application started", {});
         
-        // Simple info logging
-        client.log_info("my-app", "Application started", {
-            {"version", std::string("1.0.0")},
-            {"port", int64_t(8080)}
+        // client.LogError(ctx, "my-app", "Login failed", map[string]interface{}{
+        //     "user_id": "123",
+        //     "reason":  "invalid_password",
+        // })
+        client.log_error("my-app", "Login failed", {
+            {"user_id", std::string("123")},
+            {"reason", std::string("invalid_password")}
         });
-        std::cout << "📝 Logged: Application started (INFO)" << std::endl;
+        std::cout << "📝 [ERROR] Login failed (my-app)" << std::endl;
         
-        // Error logging with context
-        client.log_error("auth-service", "Login failed", {
-            {"user_id", std::string("user_123")},
-            {"reason", std::string("invalid_password")},
-            {"attempt_count", int64_t(3)}
-        });
-        std::cout << "📝 Logged: Login failed (ERROR)" << std::endl;
-        
-        // Debug logging
-        client.log_debug("api-service", "Processing request", {
+        // client.LogDebug(ctx, "my-app", "Processing request", map[string]interface{}{
+        //     "request_id": "req_456",
+        //     "duration":   "45ms",
+        // })
+        client.log_debug("my-app", "Processing request", {
             {"request_id", std::string("req_456")},
-            {"endpoint", std::string("/api/users")},
-            {"duration_ms", int64_t(45)}
+            {"duration", std::string("45ms")}
         });
-        std::cout << "📝 Logged: Request processed (DEBUG)" << std::endl;
+        std::cout << "📝 [DEBUG] Processing request (my-app)" << std::endl;
         
-        // Warning logging
-        client.log_warning("payment-service", "Rate limit approaching", {
-            {"current_rate", int64_t(95)},
-            {"limit", int64_t(100)},
-            {"client_ip", std::string("192.168.1.100")}
-        });
-        std::cout << "📝 Logged: Rate limit warning (WARNING)" << std::endl;
-        
-        // Ensure all logs are sent
         client.flush();
-        std::cout << "\n✅ All logs sent to UserCanal!" << std::endl;
+        std::cout << "✅ Logs sent to UserCanal!" << std::endl;
         
+        // Clean shutdown
         client.shutdown();
         
     } catch (const std::exception& e) {

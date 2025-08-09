@@ -20,12 +20,12 @@ if(NOT Flatbuffers_FOUND)
     message(FATAL_ERROR "FlatBuffers not found. Please install flatbuffers development package.")
 endif()
 
-# JSON library (nlohmann/json for properties handling) - DISABLED for now
-# find_package(nlohmann_json QUIET)
-# if(NOT nlohmann_json_FOUND)
-#     message(STATUS "nlohmann_json not found via find_package, trying PkgConfig")
-#     pkg_check_modules(NLOHMANN_JSON REQUIRED nlohmann_json)
-# endif()
+# JSON library (nlohmann/json for properties handling)
+find_package(nlohmann_json QUIET)
+if(NOT nlohmann_json_FOUND)
+    message(STATUS "nlohmann_json not found via find_package, trying PkgConfig")
+    pkg_check_modules(NLOHMANN_JSON REQUIRED nlohmann_json)
+endif()
 
 # Generate FlatBuffers headers
 set(FLATBUFFERS_FLATC_EXECUTABLE flatc)
@@ -66,10 +66,6 @@ set(SOURCES
     src/batch.cpp
     src/errors.cpp
     src/utils.cpp
-    src/hooks.cpp
-    src/observability.cpp
-    src/pipeline.cpp
-    src/session.cpp
 )
 
 set(HEADERS
@@ -81,10 +77,6 @@ set(HEADERS
     include/usercanal/errors.hpp
     include/usercanal/utils.hpp
     include/usercanal/usercanal.hpp
-    include/usercanal/hooks.hpp
-    include/usercanal/observability.hpp
-    include/usercanal/pipeline.hpp
-    include/usercanal/session.hpp
 )
 
 # Create the main library
@@ -104,16 +96,16 @@ target_link_libraries(usercanal
     PUBLIC
         Threads::Threads
         flatbuffers::flatbuffers
-    # PRIVATE
-    #     $<IF:$<TARGET_EXISTS:nlohmann_json::nlohmann_json>,nlohmann_json::nlohmann_json,${NLOHMANN_JSON_LIBRARIES}>
+    PRIVATE
+        $<IF:$<TARGET_EXISTS:nlohmann_json::nlohmann_json>,nlohmann_json::nlohmann_json,${NLOHMANN_JSON_LIBRARIES}>
 )
 
-# if(nlohmann_json_FOUND)
-#     target_compile_definitions(usercanal PRIVATE NLOHMANN_JSON_FOUND)
-# else()
-#     target_include_directories(usercanal PRIVATE ${NLOHMANN_JSON_INCLUDE_DIRS})
-#     target_compile_options(usercanal PRIVATE ${NLOHMANN_JSON_CFLAGS_OTHER})
-# endif()
+if(nlohmann_json_FOUND)
+    target_compile_definitions(usercanal PRIVATE NLOHMANN_JSON_FOUND)
+else()
+    target_include_directories(usercanal PRIVATE ${NLOHMANN_JSON_INCLUDE_DIRS})
+    target_compile_definitions(usercanal PRIVATE NLOHMANN_JSON_FOUND)
+endif()
 
 # Compiler-specific options
 target_compile_options(usercanal PRIVATE

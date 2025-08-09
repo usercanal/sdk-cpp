@@ -6,7 +6,7 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -g
 INCLUDES = -Iinclude -Igenerated -I/usr/local/include -I/usr/include/flatbuffers -I/opt/homebrew/include
 
 # Source files
-SOURCES = src/types.cpp src/errors.cpp src/config.cpp src/utils.cpp src/network.cpp src/batch.cpp src/client.cpp src/pipeline.cpp src/hooks.cpp src/observability.cpp src/session.cpp
+SOURCES = src/types.cpp src/errors.cpp src/config.cpp src/utils.cpp src/network.cpp src/batch.cpp src/client.cpp
 
 # Object files
 OBJECTS = $(SOURCES:.cpp=.o)
@@ -50,17 +50,19 @@ examples/event_revenue: examples/event_revenue.cpp $(LIBRARY)
 
 
 
+
+
 # Build tests (if gtest is available)
 tests: $(TESTS)
 
-$(TESTS): tests/test_foundation.cpp tests/test_phase2.cpp $(LIBRARY)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) tests/test_foundation.cpp tests/test_phase2.cpp -L. -lUserCanal -L/opt/homebrew/lib -lgtest -lgtest_main -pthread -o $@
+$(TESTS): tests/test_foundation.cpp tests/test_simple_client.cpp $(LIBRARY)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) tests/test_foundation.cpp tests/test_simple_client.cpp -L. -lUserCanal -L/opt/homebrew/lib -lgtest -lgtest_main -pthread -o $@
 
 # Clean build artifacts
 clean:
 	rm -f $(OBJECTS) $(LIBRARY) $(EXAMPLES) $(TESTS)
 	rm -f src/*.o examples/*.o tests/*.o
-	rm -f src/observability.o src/session.o
+
 
 # Run basic foundation example
 run-foundation: examples/basic_foundation
@@ -81,6 +83,9 @@ run-log-severities: examples/log_severities
 # Run revenue tracking example
 run-revenue: examples/event_revenue
 	./examples/event_revenue
+
+# Run debug comparison example
+
 
 
 

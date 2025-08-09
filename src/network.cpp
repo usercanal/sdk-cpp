@@ -3,6 +3,7 @@
 
 #include "usercanal/network.hpp"
 #include "usercanal/utils.hpp"
+#include <iostream>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -15,10 +16,11 @@
 #include <cstring>
 #include <algorithm>
 #include <sstream>
+#include <thread>
+#include <chrono>
 
 #ifdef __APPLE__
 #include <sys/types.h>
-#include <sys/socket.h>
 #endif
 
 namespace usercanal {
@@ -586,7 +588,7 @@ bool NetworkConfigValidator::validate_retry_config(int max_retries, std::chrono:
 // NetworkClient implementation
 class NetworkClient::Impl {
 public:
-    Impl(const Config& config) : config_(config), initialized_(false) {}
+    Impl(const Config& config) : config_(config), initialized_(false), is_connected_(false), socket_fd_(-1) {}
     
     void initialize() {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -597,6 +599,7 @@ public:
     
     void shutdown() {
         std::lock_guard<std::mutex> lock(mutex_);
+        close_connection();
         initialized_ = false;
     }
     
@@ -605,10 +608,151 @@ public:
         return initialized_;
     }
     
+    bool connect() {
+        if (is_connected_) return true;
+        
+        std::cout << "🔧 [DEBUG] Attempting to connect..." << std::endl;
+        
+        // Parse endpoint
+        std::string endpoint = config_.network().endpoint;
+        size_t colon_pos = endpoint.find(':');
+        if (colon_pos == std::string::npos) {
+            std::cout << "❌ [DEBUG] Invalid endpoint format: " << endpoint << std::endl;
+            return false;
+        }
+        
+        std::string host = endpoint.substr(0, colon_pos);
+        uint16_t port = static_cast<uint16_t>(std::stoi(endpoint.substr(colon_pos + 1)));
+        std::cout << "🔧 [DEBUG] Connecting to " << host << ":" << port << std::endl;
+        
+        // Create socket
+        socket_fd_ = socket(AF_INET, SOCK_STREAM, 0);
+        if (socket_fd_ < 0) {
+            std::cout << "❌ [DEBUG] Socket creation failed: " << strerror(errno) << std::endl;
+            return false;
+        }
+        std::cout << "🔧 [DEBUG] Socket created successfully (fd=" << socket_fd_ << ")" << std::endl;
+        
+        // Set up address
+        struct sockaddr_in server_addr{};
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_port = htons(port);
+        
+        if (inet_pton(AF_INET, host.c_str(), &server_addr.sin_addr) <= 0) {
+            std::cout << "🔧 [DEBUG] IP address parsing failed, trying hostname resolution..." << std::endl;
+            // Try hostname resolution
+            struct hostent* host_entry = gethostbyname(host.c_str());
+            if (!host_entry) {
+                std::cout << "❌ [DEBUG] Hostname resolution failed for: " << host << std::endl;
+                close(socket_fd_);
+                socket_fd_ = -1;
+                return false;
+            }
+            std::cout << "🔧 [DEBUG] Hostname resolved successfully" << std::endl;
+            memcpy(&server_addr.sin_addr, host_entry->h_addr, host_entry->h_length);
+        } else {
+            std::cout << "🔧 [DEBUG] IP address parsed successfully" << std::endl;
+        }
+        
+        // Connect
+        std::cout << "🔧 [DEBUG] Attempting TCP connection..." << std::endl;
+        if (::connect(socket_fd_, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+            std::cout << "❌ [DEBUG] TCP connection failed: " << strerror(errno) << std::endl;
+            std::cout << "❌ [DEBUG] Is server running on " << host << ":" << port << "?" << std::endl;
+            close(socket_fd_);
+            socket_fd_ = -1;
+            return false;
+        }
+        
+        std::cout << "✅ [DEBUG] TCP connection established!" << std::endl;
+        is_connected_ = true;
+        return true;
+    }
+    
+    void close_connection() {
+        if (socket_fd_ >= 0) {
+            close(socket_fd_);
+            socket_fd_ = -1;
+        }
+        is_connected_ = false;
+    }
+    
     void send_data(const std::vector<uint8_t>& data) {
-        (void)data; // Suppress unused warning
-        // Implementation would send data over network
-        stats_.bytes_sent += data.size();
+        // DEBUG: Print what we're trying to send
+        std::cout << "🔧 [DEBUG] Sending " << data.size() << " bytes to " 
+                  << config_.network().endpoint << std::endl;
+        
+        // DEBUG: Dump first 64 bytes of data in hex
+        std::cout << "🔧 [DEBUG] Data (hex): ";
+        for (size_t i = 0; i < std::min(data.size(), size_t(64)); ++i) {
+            printf("%02x ", data[i]);
+        }
+        if (data.size() > 64) std::cout << "...";
+        std::cout << std::endl;
+        
+        // DEBUG: Try to show as ASCII for readability
+        std::cout << "🔧 [DEBUG] Data (ascii): ";
+        for (size_t i = 0; i < std::min(data.size(), size_t(64)); ++i) {
+            char c = static_cast<char>(data[i]);
+            std::cout << (isprint(c) ? c : '.');
+        }
+        if (data.size() > 64) std::cout << "...";
+        std::cout << std::endl;
+
+        if (!is_connected_) {
+            std::cout << "🔧 [DEBUG] Not connected, attempting to connect..." << std::endl;
+            if (!connect()) {
+                std::cout << "❌ [DEBUG] Connection failed!" << std::endl;
+                stats_.connections_failed++;
+                return;
+            }
+            std::cout << "✅ [DEBUG] Connected successfully!" << std::endl;
+        }
+
+        // Create frame with 4-byte big-endian length prefix + data
+        std::vector<uint8_t> frame;
+        frame.reserve(4 + data.size());
+        
+        // Add 4-byte big-endian length prefix
+        uint32_t data_length = static_cast<uint32_t>(data.size());
+        frame.push_back((data_length >> 24) & 0xFF);  // MSB
+        frame.push_back((data_length >> 16) & 0xFF);
+        frame.push_back((data_length >> 8) & 0xFF);
+        frame.push_back(data_length & 0xFF);          // LSB
+        
+        // Add actual data
+        frame.insert(frame.end(), data.begin(), data.end());
+        
+        std::cout << "🔧 [DEBUG] Frame: " << frame.size() << " bytes (4-byte prefix + " << data.size() << " payload)" << std::endl;
+
+        // Send complete frame over TCP socket
+        size_t total_sent = 0;
+        while (total_sent < frame.size()) {
+            ssize_t bytes_sent = ::send(socket_fd_, 
+                                      frame.data() + total_sent, 
+                                      frame.size() - total_sent, 
+                                      0); // Remove MSG_NOSIGNAL for macOS compatibility
+            
+            if (bytes_sent < 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    // Socket buffer full, retry after a short wait
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    continue;
+                }
+                
+                // Connection error, mark as disconnected
+                std::cout << "❌ [DEBUG] Send error: " << strerror(errno) << std::endl;
+                is_connected_ = false;
+                close_connection();
+                stats_.connections_failed++;
+                return;
+            }
+            
+            total_sent += bytes_sent;
+        }
+        
+        std::cout << "✅ [DEBUG] Successfully sent " << total_sent << " bytes!" << std::endl;
+        stats_.bytes_sent += frame.size();
         stats_.send_operations++;
     }
     
@@ -628,6 +772,8 @@ public:
 private:
     Config config_;
     bool initialized_;
+    bool is_connected_;
+    int socket_fd_;
     NetworkStats stats_;
     mutable std::mutex mutex_;
 };
