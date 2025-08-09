@@ -257,16 +257,21 @@ std::vector<uint8_t> Batch<ItemType>::serialize(const ApiKey& api_key, SchemaTyp
     // Convert API key hex string to 16-byte array
     std::vector<uint8_t> api_key_bytes(16, 0);
     if (api_key.length() == 32) {
+        // Validate hex string format
+        for (size_t i = 0; i < 32; ++i) {
+            char c = api_key[i];
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                throw std::invalid_argument("API key must be 32-character hexadecimal string");
+            }
+        }
+        
         // Parse hex string: "000102030405060708090a0b0c0d0e0f" -> [0x00, 0x01, 0x02, ...]
         for (size_t i = 0; i < 16; ++i) {
             std::string hex_byte = api_key.substr(i * 2, 2);
             api_key_bytes[i] = static_cast<uint8_t>(std::stoul(hex_byte, nullptr, 16));
         }
     } else {
-        // Fallback for non-hex strings (pad or truncate)
-        for (size_t i = 0; i < std::min(api_key.size(), api_key_bytes.size()); ++i) {
-            api_key_bytes[i] = static_cast<uint8_t>(api_key[i]);
-        }
+        throw std::invalid_argument("API key must be exactly 32 characters long");
     }
     auto api_key_vec = batch_builder.CreateVector(api_key_bytes);
     
@@ -543,6 +548,13 @@ public:
             return false; // Queue full
         }
         
+        // Global memory limit check - prevent DoS via large payloads
+        const size_t MAX_TOTAL_MEMORY = 50 * 1024 * 1024; // 50MB total limit
+        size_t current_memory = get_estimated_memory_usage();
+        if (current_memory + event->get_estimated_size() > MAX_TOTAL_MEMORY) {
+            return false; // Memory limit exceeded
+        }
+        
         // Check if current batch is full
         if (event_batch_->is_full(config_.event_batch_size, config_.max_batch_size_bytes)) {
             flush_event_batch();
@@ -564,6 +576,13 @@ public:
         
         if (log_queue_.size() >= config_.max_queue_size) {
             return false; // Queue full
+        }
+        
+        // Global memory limit check - prevent DoS via large payloads
+        const size_t MAX_TOTAL_MEMORY = 50 * 1024 * 1024; // 50MB total limit
+        size_t current_memory = get_estimated_memory_usage();
+        if (current_memory + log->get_estimated_size() > MAX_TOTAL_MEMORY) {
+            return false; // Memory limit exceeded
         }
         
         // Check if current batch is full
@@ -751,6 +770,24 @@ private:
     std::thread flush_thread_;
     mutable std::mutex mutex_;
     std::condition_variable condition_;
+    
+    // Helper method to calculate current memory usage
+    size_t get_estimated_memory_usage() const {
+        size_t total = 0;
+        
+        // Current batch sizes
+        total += event_batch_->get_total_size();
+        total += log_batch_->get_total_size();
+        
+        // Queue sizes
+        // Note: std::queue doesn't support iteration, so we approximate
+        // based on queue size and average batch size
+        size_t avg_batch_size = 10 * 1024; // 10KB average estimate
+        total += event_queue_.size() * avg_batch_size;
+        total += log_queue_.size() * avg_batch_size;
+        
+        return total;
+    }
 };
 
 BatchManager::BatchManager(const BatchConfig& config, const ApiKey& api_key)
@@ -988,7 +1025,7 @@ bool validate_event_item(const EventBatchItem& item) {
         return false;
     }
     
-    if (item.get_estimated_size() > 1024 * 1024) { // 1MB limit
+    if (item.get_estimated_size() > 1024 * 1024) { // 1MB limit per item
         return false;
     }
     
@@ -1004,7 +1041,7 @@ bool validate_log_item(const LogBatchItem& item) {
         return false;
     }
     
-    if (item.get_estimated_size() > 1024 * 1024) { // 1MB limit
+    if (item.get_estimated_size() > 1024 * 1024) { // 1MB limit per item
         return false;
     }
     
@@ -1012,7 +1049,11 @@ bool validate_log_item(const LogBatchItem& item) {
 }
 
 bool validate_batch_size(size_t items, size_t bytes, const BatchConfig& config) {
-    return items <= config.event_batch_size && bytes <= config.max_batch_size_bytes;
+    // Enforce both item count and byte limits for security
+    const size_t MAX_TOTAL_BATCH_BYTES = 10 * 1024 * 1024; // 10MB total batch limit
+    return items <= config.event_batch_size && 
+           bytes <= config.max_batch_size_bytes &&
+           bytes <= MAX_TOTAL_BATCH_BYTES;
 }
 
 } // namespace BatchUtils

@@ -112,6 +112,10 @@ public:
                 if (!host_entry) {
                     throw NetworkUtils::create_network_error("dns_resolve", h_errno);
                 }
+                // Security fix: Validate address length to prevent buffer overflow
+                if (host_entry->h_length != sizeof(server_addr.sin_addr) || host_entry->h_addrtype != AF_INET) {
+                    throw NetworkUtils::create_network_error("invalid_address_format", EINVAL);
+                }
                 memcpy(&server_addr.sin_addr, host_entry->h_addr_list[0], host_entry->h_length);
             }
             
@@ -636,6 +640,12 @@ public:
             // Try hostname resolution
             struct hostent* host_entry = gethostbyname(host.c_str());
             if (!host_entry) {
+                close(socket_fd_);
+                socket_fd_ = -1;
+                return false;
+            }
+            // Security fix: Validate address length to prevent buffer overflow
+            if (host_entry->h_length != sizeof(server_addr.sin_addr) || host_entry->h_addrtype != AF_INET) {
                 close(socket_fd_);
                 socket_fd_ = -1;
                 return false;
