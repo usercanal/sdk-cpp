@@ -1,10 +1,24 @@
 # UserCanal C++ SDK - Changelog
 
-## [1.0.0] - 2025-08-09
+## August 13, 2025
+EventAdvanced & Schema Updates
 
-### Added - First Production Release
+- feat: Added EventAdvanced struct with optional device_id, session_id, timestamp overrides
+- feat: Added `client.event_advanced(event)` method for manual ID overrides
+- feat: Added event_name and session_id fields to Event FlatBuffers schema
+- feat: Added CONTEXT EventType for session/device context routing
+- feat: Added comprehensive constants library (EventNames, Currencies, PaymentMethods, etc.)
+- feat: Added protocol version support
+- refactor: Schema field reordering and user_id renamed to device_id
+- refactor: Server events default to nil device_id/session_id
+- refactor: Event constants use title case format
+- fix: Added missing version to batch serialization
+- **BREAKING**: Event schema updated, server behavior changed, constants format changed
 
-#### Core SDK Features (Matching Go SDK Scope)
+## August 9, 2025
+First Production Release
+
+### Added - Core SDK Features (Matching Go SDK Scope)
 - feat: Complete C++ SDK implementation with FlatBuffers serialization
 - feat: Basic client with event tracking and structured logging
 - feat: Simple configuration management with endpoint and batch settings

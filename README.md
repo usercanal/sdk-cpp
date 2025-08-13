@@ -250,12 +250,43 @@ All examples are user-focused and production-ready. Internal phase examples have
 
 ### Event Tracking
 ```cpp
+// Regular events (server-side behavior - nil device_id/session_id)
+client.event("user_123", "user_signed_up", properties);
+client.event_revenue("user_123", "order_456", 29.99, "USD", properties);
+
+// Legacy methods (still supported)
 client.track("event_name", properties);
 client.track_user_signup(user_id, properties);  
 client.track_revenue(user_id, amount, currency, properties);
 ```
 
-### Structured Logging  
+### EventAdvanced - Manual ID Overrides
+```cpp
+// Basic EventAdvanced (same as regular event)
+Properties login_props;
+login_props["method"] = std::string("password");
+EventAdvanced login_event("user_123", "user_logged_in", login_props);
+client.event_advanced(login_event);
+
+// With custom device_id (for mobile/proxy scenarios)
+EventAdvanced mobile_event("user_123", "feature_used", properties);
+mobile_event.device_id = create_uuid("a1b2c3d4e5f6789012345678901234ab");
+client.event_advanced(mobile_event);
+
+// With custom device_id and session_id
+EventAdvanced full_event("user_123", "purchase_completed", properties);
+full_event.device_id = create_uuid("a1b2c3d4e5f6789012345678901234ab");
+full_event.session_id = create_uuid("11223344556677889900112233445566");
+client.event_advanced(full_event);
+
+// With custom timestamp (for backfilling)
+EventAdvanced historical_event("user_123", "page_viewed", properties);
+auto past_timestamp = Utils::now_milliseconds() - 3600000; // 1 hour ago
+historical_event.timestamp = std::make_unique<Timestamp>(past_timestamp);
+client.event_advanced(historical_event);
+```
+
+### Structured Logging
 ```cpp
 client.log_info(service, message, properties);
 client.log_warning(service, message, properties);

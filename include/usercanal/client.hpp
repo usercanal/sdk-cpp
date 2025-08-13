@@ -50,6 +50,9 @@ public:
                       double amount, const std::string& currency = "USD",
                       const Properties& properties = {});
     
+    // Advanced event tracking with optional device/session ID overrides (matching Go SDK EventAdvanced method)
+    void event_advanced(const EventAdvanced& event);
+    
     // Structured logging (matching Go SDK LogInfo, LogError, etc.)
     void log_info(const std::string& service, const std::string& message, const Properties& data = {});
     void log_error(const std::string& service, const std::string& message, const Properties& data = {});

@@ -70,12 +70,12 @@ public:
         if (!initialized_) return;
         
         try {
-            // Add event_name to properties
-            Properties event_props = properties;
-            event_props["event_name"] = event_name;
+            // Create EventAdvanced with server-side behavior (nil device_id and session_id)
+            EventAdvanced advanced_event(user_id, event_name, properties);
+            // device_id and session_id remain nil for server-side events
             
-            // Create and submit event batch item
-            auto event_item = batch_manager_.create_event_item(EventType::TRACK, user_id, event_props);
+            // Create and submit event batch item using advanced constructor
+            auto event_item = batch_manager_.create_event_advanced_item(advanced_event);
             if (batch_manager_.submit_event(std::move(event_item))) {
                 stats_.events_sent++;
             } else {
@@ -95,9 +95,12 @@ public:
             revenue_props["order_id"] = order_id;
             revenue_props["amount"] = amount;
             revenue_props["currency"] = currency;
-            revenue_props["event_name"] = std::string("revenue");
             
-            auto event_item = batch_manager_.create_event_item(EventType::TRACK, user_id, revenue_props);
+            // Create EventAdvanced for revenue with server-side behavior
+            EventAdvanced revenue_event(user_id, EventNames::ORDER_COMPLETED, revenue_props);
+            // device_id and session_id remain nil for server-side events
+            
+            auto event_item = batch_manager_.create_event_advanced_item(revenue_event);
             if (batch_manager_.submit_event(std::move(event_item))) {
                 stats_.events_sent++;
             } else {
@@ -105,6 +108,21 @@ public:
             }
         } catch (const std::exception& e) {
             std::cerr << "Error submitting revenue event: " << e.what() << std::endl;
+        }
+    }
+    
+    void event_advanced(const EventAdvanced& event) {
+        if (!initialized_) return;
+        
+        try {
+            auto event_item = batch_manager_.create_event_advanced_item(event);
+            if (batch_manager_.submit_event(std::move(event_item))) {
+                stats_.events_sent++;
+            } else {
+                std::cerr << "Failed to submit advanced event to batch queue" << std::endl;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Error submitting advanced event: " << e.what() << std::endl;
         }
     }
     
@@ -190,6 +208,10 @@ void Client::event(const std::string& user_id, const std::string& event_name, co
 void Client::event_revenue(const std::string& user_id, const std::string& order_id, 
                           double amount, const std::string& currency, const Properties& properties) {
     impl_->event_revenue(user_id, order_id, amount, currency, properties);
+}
+
+void Client::event_advanced(const EventAdvanced& event) {
+    impl_->event_advanced(event);
 }
 
 void Client::log_info(const std::string& service, const std::string& message, const Properties& data) {

@@ -19,6 +19,9 @@ using namespace schema::common;
 #define NLOHMANN_JSON_FOUND
 #include <nlohmann/json.hpp>
 
+// Protocol version (matching Go SDK)
+const uint8_t PROTOCOL_VERSION_CURRENT = 100; // v1.0 = 100
+
 
 
 namespace usercanal {
@@ -40,22 +43,60 @@ EventBatchItem::EventBatchItem(EventType event_type, const std::string& user_id,
     set_estimated_size(calculate_size());
 }
 
+// EventAdvanced constructor with optional device_id, session_id, and event_name
+EventBatchItem::EventBatchItem(EventType event_type, const std::string& user_id, const std::string& event_name,
+                               const Properties& properties,
+                               std::unique_ptr<std::vector<uint8_t>> device_id,
+                               std::unique_ptr<std::vector<uint8_t>> session_id,
+                               std::unique_ptr<Timestamp> custom_timestamp)
+    : BatchItem(BatchItemType::EVENT, custom_timestamp ? *custom_timestamp : Utils::now_milliseconds()),
+      event_type_(event_type), user_id_(user_id), event_name_(event_name),
+      device_id_(std::move(device_id)), session_id_(std::move(session_id)),
+      custom_timestamp_(std::move(custom_timestamp)) {
+    
+    payload_ = BatchUtils::serialize_properties(properties);
+    set_estimated_size(calculate_size());
+}
+
 std::vector<uint8_t> EventBatchItem::serialize() const {
     // Create FlatBuffers builder
     flatbuffers::FlatBufferBuilder builder(1024);
     
-    // Convert user_id string to uint8_t vector
-    std::vector<uint8_t> user_id_bytes(user_id_.begin(), user_id_.end());
+    // Create offsets for optional fields
+    flatbuffers::Offset<flatbuffers::Vector<uint8_t>> device_id_offset;
+    if (device_id_) {
+        device_id_offset = builder.CreateVector(*device_id_);
+    }
     
-    // Use high-level CreateEvent function (like FlatBuffers examples)
-    auto timestamp = Utils::now_milliseconds();
-    auto event = schema::event::CreateEventDirect(
-        builder,
-        timestamp,
-        static_cast<schema::event::EventType>(event_type_),
-        &user_id_bytes,
-        &payload_
-    );
+    flatbuffers::Offset<flatbuffers::Vector<uint8_t>> session_id_offset;
+    if (session_id_) {
+        session_id_offset = builder.CreateVector(*session_id_);
+    }
+    
+    flatbuffers::Offset<flatbuffers::String> event_name_offset;
+    if (!event_name_.empty()) {
+        event_name_offset = builder.CreateString(event_name_);
+    }
+    
+    auto payload_offset = builder.CreateVector(payload_);
+    
+    // Build Event using the new schema with all fields
+    schema::event::EventBuilder event_builder(builder);
+    event_builder.add_event_type(static_cast<schema::event::EventType>(event_type_));
+    event_builder.add_timestamp(get_timestamp());
+    
+    if (device_id_) {
+        event_builder.add_device_id(device_id_offset);
+    }
+    if (session_id_) {
+        event_builder.add_session_id(session_id_offset);
+    }
+    if (!event_name_.empty()) {
+        event_builder.add_event_name(event_name_offset);
+    }
+    
+    event_builder.add_payload(payload_offset);
+    auto event = event_builder.Finish();
     
     // Create Events vector
     std::vector<flatbuffers::Offset<schema::event::Event>> events_vector = {event};
@@ -75,12 +116,24 @@ std::vector<uint8_t> EventBatchItem::serialize() const {
 }
 
 size_t EventBatchItem::calculate_size() const {
-    return sizeof(uint64_t) +  // timestamp
-           sizeof(uint8_t) +   // event_type
-           16 +                // user_id (UUID)
-           sizeof(uint32_t) +  // payload length
-           payload_.size() +   // payload data
-           32;                 // FlatBuffers overhead
+    size_t size = sizeof(uint64_t) +  // timestamp
+                  sizeof(uint8_t) +   // event_type
+                  sizeof(uint32_t) +  // payload length
+                  payload_.size() +   // payload data
+                  32;                 // FlatBuffers overhead
+    
+    // Add optional field sizes
+    if (device_id_) {
+        size += device_id_->size() + sizeof(uint32_t); // vector length + data
+    }
+    if (session_id_) {
+        size += session_id_->size() + sizeof(uint32_t); // vector length + data
+    }
+    if (!event_name_.empty()) {
+        size += event_name_.size() + sizeof(uint32_t); // string length + data
+    }
+    
+    return size;
 }
 
 // LogBatchItem implementation
@@ -281,6 +334,7 @@ std::vector<uint8_t> Batch<ItemType>::serialize(const ApiKey& api_key, SchemaTyp
     // Use BatchBuilder pattern to match Go SDK's schema_common.BatchStart/BatchAdd/BatchEnd
     schema::common::BatchBuilder builder(batch_builder);
     builder.add_api_key(api_key_vec);
+    builder.add_version(PROTOCOL_VERSION_CURRENT);
     builder.add_batch_id(batch_id_);
     
     schema::common::SchemaType common_schema_type = (schema_type == SchemaType::EVENT) 
@@ -603,6 +657,29 @@ public:
         return std::make_unique<EventBatchItem>(type, user_id, properties);
     }
 
+    std::unique_ptr<EventBatchItem> create_event_advanced_item(const EventAdvanced& event) {
+        // Convert device_id and session_id to unique_ptr if provided
+        std::unique_ptr<std::vector<uint8_t>> device_id_ptr = nullptr;
+        if (event.device_id) {
+            device_id_ptr = std::make_unique<std::vector<uint8_t>>(*event.device_id);
+        }
+        
+        std::unique_ptr<std::vector<uint8_t>> session_id_ptr = nullptr;
+        if (event.session_id) {
+            session_id_ptr = std::make_unique<std::vector<uint8_t>>(*event.session_id);
+        }
+        
+        std::unique_ptr<Timestamp> timestamp_ptr = nullptr;
+        if (event.timestamp) {
+            timestamp_ptr = std::make_unique<Timestamp>(*event.timestamp);
+        }
+        
+        return std::make_unique<EventBatchItem>(
+            EventType::TRACK, event.user_id, event.event_name, event.properties,
+            std::move(device_id_ptr), std::move(session_id_ptr), std::move(timestamp_ptr)
+        );
+    }
+
     std::unique_ptr<LogBatchItem> create_log_item(LogLevel level, const std::string& service, const std::string& message, const Properties& data) {
         return std::make_unique<LogBatchItem>(level, service, message, data);
     }
@@ -812,6 +889,10 @@ bool BatchManager::submit_log(std::unique_ptr<LogBatchItem> log) {
 
 std::unique_ptr<EventBatchItem> BatchManager::create_event_item(EventType type, const std::string& user_id, const Properties& properties) {
     return pimpl_->create_event_item(type, user_id, properties);
+}
+
+std::unique_ptr<EventBatchItem> BatchManager::create_event_advanced_item(const EventAdvanced& event) {
+    return pimpl_->create_event_advanced_item(event);
 }
 
 std::unique_ptr<LogBatchItem> BatchManager::create_log_item(LogLevel level, const std::string& service, const std::string& message, const Properties& data) {

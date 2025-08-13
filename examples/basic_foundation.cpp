@@ -1,6 +1,5 @@
 // basic_foundation.cpp
 // Getting Started with UserCanal C++ SDK
-// Your first example showing basic setup and usage
 
 #include <iostream>
 #include "usercanal/usercanal.hpp"
@@ -22,14 +21,13 @@ int main() {
 
         std::cout << "✅ UserCanal SDK initialized successfully\n" << std::endl;
 
-        // Track your first event
+        // Track a signup event using predefined constant
         Properties props;
-        props["message"] = std::string("My first UserCanal event!");
-        props["timestamp"] = static_cast<int64_t>(Utils::now_milliseconds());
-        client.track("user_123", "hello_world", props);
+        props["signup_method"] = std::string("email");
+        props["referral_source"] = std::string("google");
+        client.event("user_123", EventNames::USER_SIGNED_UP, props);
 
-        // Send your first log
-        Properties log_props;
+        // Send your first log  
         client.log_info("my-app", "Application started", {});
 
         // Make sure data is sent

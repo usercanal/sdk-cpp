@@ -68,9 +68,19 @@ public:
     EventBatchItem(EventType event_type, const std::string& user_id, const Properties& properties);
     EventBatchItem(EventType event_type, const std::string& user_id, std::vector<uint8_t> payload);
     
+    // Constructor for EventAdvanced with optional device_id, session_id, and event_name
+    EventBatchItem(EventType event_type, const std::string& user_id, const std::string& event_name, 
+                   const Properties& properties, 
+                   std::unique_ptr<std::vector<uint8_t>> device_id = nullptr,
+                   std::unique_ptr<std::vector<uint8_t>> session_id = nullptr,
+                   std::unique_ptr<Timestamp> custom_timestamp = nullptr);
+    
     EventType get_event_type() const { return event_type_; }
     const std::string& get_user_id() const { return user_id_; }
+    const std::string& get_event_name() const { return event_name_; }
     const std::vector<uint8_t>& get_payload() const { return payload_; }
+    const std::vector<uint8_t>* get_device_id() const { return device_id_.get(); }
+    const std::vector<uint8_t>* get_session_id() const { return session_id_.get(); }
     
     std::vector<uint8_t> serialize() const override;
     size_t calculate_size() const override;
@@ -78,7 +88,11 @@ public:
 private:
     EventType event_type_;
     std::string user_id_;
+    std::string event_name_;
     std::vector<uint8_t> payload_;
+    std::unique_ptr<std::vector<uint8_t>> device_id_;  // Optional 16-byte UUID
+    std::unique_ptr<std::vector<uint8_t>> session_id_; // Optional 16-byte UUID
+    std::unique_ptr<Timestamp> custom_timestamp_;      // Optional custom timestamp
 };
 
 // Log batch item
@@ -270,6 +284,7 @@ public:
     
     // Batch creation helpers
     std::unique_ptr<EventBatchItem> create_event_item(EventType type, const std::string& user_id, const Properties& properties);
+    std::unique_ptr<EventBatchItem> create_event_advanced_item(const EventAdvanced& event);
     std::unique_ptr<LogBatchItem> create_log_item(LogLevel level, const std::string& service, const std::string& message, const Properties& data = {});
     
     // Queue management

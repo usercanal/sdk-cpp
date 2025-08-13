@@ -15,7 +15,7 @@ OBJECTS = $(SOURCES:.cpp=.o)
 LIBRARY = libUserCanal.a
 
 # Example executables
-EXAMPLES = examples/basic_foundation examples/event_simple examples/log_simple examples/log_severities examples/event_revenue
+EXAMPLES = examples/basic_foundation examples/event_simple examples/log_simple examples/log_severities examples/event_revenue examples/event_advanced
 
 # Test executable
 TESTS = tests/usercanal_tests
@@ -46,6 +46,9 @@ examples/log_severities: examples/log_severities.cpp $(LIBRARY)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $< -L. -lUserCanal -pthread -o $@
 
 examples/event_revenue: examples/event_revenue.cpp $(LIBRARY)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $< -L. -lUserCanal -pthread -o $@
+
+examples/event_advanced: examples/event_advanced.cpp $(LIBRARY)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $< -L. -lUserCanal -pthread -o $@
 
 
@@ -83,6 +86,10 @@ run-log-severities: examples/log_severities
 # Run revenue tracking example
 run-revenue: examples/event_revenue
 	./examples/event_revenue
+
+# Run advanced event example
+run-advanced: examples/event_advanced
+	./examples/event_advanced
 
 # Run debug comparison example
 
