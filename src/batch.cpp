@@ -138,8 +138,8 @@ size_t EventBatchItem::calculate_size() const {
 
 // LogBatchItem implementation
 LogBatchItem::LogBatchItem(LogLevel level, const std::string& service, const std::string& message, 
-                           const Properties& data, ContextId context_id)
-    : BatchItem(BatchItemType::LOG), level_(level), service_(service), context_id_(context_id) {
+                           const Properties& data, const SessionId& session_id)
+    : BatchItem(BatchItemType::LOG), level_(level), service_(service), session_id_(session_id) {
     
     // Create payload with message and data
     Properties combined_props = data;
@@ -149,9 +149,9 @@ LogBatchItem::LogBatchItem(LogLevel level, const std::string& service, const std
 }
 
 LogBatchItem::LogBatchItem(LogLevel level, const std::string& service, std::vector<uint8_t> payload,
-                           ContextId context_id)
+                           const SessionId& session_id)
     : BatchItem(BatchItemType::LOG), level_(level), service_(service), 
-      context_id_(context_id), payload_(std::move(payload)) {
+      session_id_(session_id), payload_(std::move(payload)) {
     set_estimated_size(calculate_size());
 }
 
@@ -166,7 +166,7 @@ std::vector<uint8_t> LogBatchItem::serialize() const {
 
 size_t LogBatchItem::calculate_size() const {
     return sizeof(uint8_t) +      // event_type
-           sizeof(uint64_t) +     // context_id
+           16 +                   // session_id (16-byte UUID)
            sizeof(uint8_t) +      // level
            sizeof(uint64_t) +     // timestamp
            32 +                   // source hostname (estimated)
@@ -240,10 +240,10 @@ std::vector<uint8_t> Batch<ItemType>::serialize(const ApiKey& api_key, SchemaTyp
                 std::string hostname = Utils::get_hostname();
                 uint64_t timestamp = Utils::now_milliseconds();
                 
-                // Generate context_id if it's 0 (matching Go SDK behavior)
-                uint64_t context_id = log_item->get_context_id();
-                if (context_id == 0) {
-                    context_id = Utils::generate_context_id();
+                // Generate session_id if empty (matching Go SDK behavior)
+                SessionId session_id = log_item->get_session_id();
+                if (session_id.empty()) {
+                    session_id = Utils::generate_session_id();
                 }
                 
                 // Convert level to FlatBuffer LogLevel enum
@@ -269,10 +269,13 @@ std::vector<uint8_t> Batch<ItemType>::serialize(const ApiKey& api_key, SchemaTyp
                 auto payload_offset = inner_builder.CreateVector(log_item->get_payload());
                 
                 // Use generated CreateLogEntry function with corrected field order
+                // Create session_id vector
+                auto session_id_offset = inner_builder.CreateVector(session_id);
+                
                 auto log_entry = schema::log::CreateLogEntry(
                     inner_builder,
                     schema::log::LogEventType_LOG,  // event_type
-                    context_id,                     // context_id 
+                    session_id_offset,              // session_id 
                     fb_level,                       // level
                     timestamp,                      // timestamp
                     source_offset,                  // source

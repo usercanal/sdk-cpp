@@ -149,12 +149,22 @@ BatchId generate_batch_id() {
     return dis(gen);
 }
 
-ContextId generate_context_id() {
+SessionId generate_session_id() {
     static thread_local std::random_device rd;
-    static thread_local std::mt19937_64 gen(rd());
-    static thread_local std::uniform_int_distribution<ContextId> dis;
+    static thread_local std::mt19937 gen(rd());
+    static thread_local std::uniform_int_distribution<uint8_t> dis;
     
-    return dis(gen);
+    // Generate 16-byte UUID
+    SessionId session_id(16);
+    for (size_t i = 0; i < 16; ++i) {
+        session_id[i] = dis(gen);
+    }
+    
+    // Set version (4) and variant bits for UUID v4
+    session_id[6] = (session_id[6] & 0x0F) | 0x40; // Version 4
+    session_id[8] = (session_id[8] & 0x3F) | 0x80; // Variant bits
+    
+    return session_id;
 }
 
 } // namespace Utils

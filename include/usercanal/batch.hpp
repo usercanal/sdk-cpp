@@ -99,13 +99,13 @@ private:
 class LogBatchItem : public BatchItem {
 public:
     LogBatchItem(LogLevel level, const std::string& service, const std::string& message, 
-                 const Properties& data = {}, ContextId context_id = 0);
+                 const Properties& data = {}, const SessionId& session_id = {});
     LogBatchItem(LogLevel level, const std::string& service, std::vector<uint8_t> payload,
-                 ContextId context_id = 0);
+                 const SessionId& session_id = {});
     
     LogLevel get_level() const { return level_; }
     const std::string& get_service() const { return service_; }
-    ContextId get_context_id() const { return context_id_; }
+    const SessionId& get_session_id() const { return session_id_; }
     const std::vector<uint8_t>& get_payload() const { return payload_; }
     
     std::vector<uint8_t> serialize() const override;
@@ -114,7 +114,7 @@ public:
 private:
     LogLevel level_;
     std::string service_;
-    ContextId context_id_;
+    SessionId session_id_;
     std::vector<uint8_t> payload_;
 };
 

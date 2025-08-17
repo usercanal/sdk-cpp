@@ -27,7 +27,7 @@ using ServiceName = std::string;
 using HostName = std::string;
 using Timestamp = uint64_t;
 using BatchId = uint64_t;
-using ContextId = uint64_t;
+using SessionId = std::vector<uint8_t>; // 16-byte session UUID for correlation
 
 // Properties type - optimized for performance
 using PropertyValue = std::variant<
@@ -517,8 +517,8 @@ bool is_valid_user_id(const std::string& user_id);
 // Generate a random batch ID
 BatchId generate_batch_id();
 
-// Generate a random context ID
-ContextId generate_context_id();
+// Generate a random session ID
+SessionId generate_session_id();
 
 } // namespace Utils
 
